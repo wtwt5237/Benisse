@@ -32,6 +32,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-resolution", type=float, default=3.5,
                     help="keep entries with resolution_A <= this; entries without a resolution (NMR) are dropped")
+    ap.add_argument("--min-backbone-fraction", type=float, default=0.9,
+                    help="drop records whose fraction of V residues with complete N/CA/C/O backbone is below this")
+    ap.add_argument("--max-partial-residues", type=int, default=5,
+                    help="drop records with more residues missing individual backbone atoms than this")
     args = ap.parse_args()
     md = pd.read_csv(os.path.join(SRC, "metadata.tsv"), sep="\t", keep_default_na=False)
     rep = md[md.is_representative.astype(str) == "True"].copy()
@@ -105,6 +109,7 @@ def main():
             structure_cif=f"structures_cif/{sid}.cif", structure_pdb=f"structures_pdb/{sid}.pdb",
             backbone_npz=f"backbone_npz/{sid}.npz", source_mmcif_url=s.mmcif_url, source_mmcif_sha256=s.mmcif_sha256))
     master = pd.DataFrame(rows).sort_values("pdb_id")
+    rep_paths = master[["structure_cif", "structure_pdb", "backbone_npz"]].copy()
     n0 = len(master)
     r = pd.to_numeric(master.resolution_A, errors="coerce")
     dropped = master[~(r <= args.max_resolution)]
@@ -112,9 +117,43 @@ def main():
     for col, d in (("structure_cif", "structures_cif"), ("structure_pdb", "structures_pdb"), ("backbone_npz", "backbone_npz")):
         for p in dropped[col]:
             os.remove(os.path.join(OUT, p))
+    # quality: unknown residues / largely unmodeled / badly built backbones
+    removed = [dict(sample_id=x, reason="resolution > cutoff or no resolution (NMR)") for x in dropped.sample_id]
+    bad = {}
+    for r_ in master.itertuples():
+        why = []
+        if "X" in r_.heavy_v_sequence:
+            why.append(f"{r_.heavy_v_sequence.count('X')} unknown (X/UNK) residues in heavy V sequence")
+        if r_.backbone_complete_fraction < args.min_backbone_fraction:
+            why.append(f"only {r_.backbone_complete_fraction:.0%} of residues have a complete backbone")
+        if r_.n_residues_partial_backbone > args.max_partial_residues:
+            why.append(f"{r_.n_residues_partial_backbone} residues missing individual backbone atoms")
+        if why:
+            bad[r_.sample_id] = "; ".join(why)
+    removed += [dict(sample_id=k, reason=v) for k, v in bad.items()]
+    master = master[~master.sample_id.isin(bad)]
+    # one record per identical heavy V sequence: best (lowest) resolution, then most complete backbone
+    master = master.assign(_res=pd.to_numeric(master.resolution_A))
+    master = master.sort_values(["heavy_v_sequence", "_res", "backbone_complete_fraction", "n_missing_residues", "pdb_id"],
+                                ascending=[True, True, False, True, True])
+    grp = master.groupby("heavy_v_sequence")
+    master["n_entries_same_sequence"] = grp.pdb_id.transform("size")
+    master["other_pdb_ids_same_sequence"] = grp.pdb_id.transform(lambda x: ";".join(x)).combine(
+        master.pdb_id, lambda allp, p: ";".join(q for q in allp.split(";") if q != p))
+    dup = master[master.duplicated("heavy_v_sequence", keep="first")]
+    removed += [dict(sample_id=x, reason=f"duplicate sequence; kept {k} (better or equal resolution)")
+                for x, k in zip(dup.sample_id, dup.heavy_v_sequence.map(master.drop_duplicates("heavy_v_sequence").set_index("heavy_v_sequence").sample_id))]
+    master = master.drop_duplicates("heavy_v_sequence", keep="first").drop(columns="_res").sort_values("pdb_id")
+    keep = set(master.sample_id)
+    for col in ("structure_cif", "structure_pdb", "backbone_npz"):
+        for p in rep_paths[col]:
+            if os.path.basename(p).rsplit(".", 1)[0] not in keep and os.path.exists(os.path.join(OUT, p)):
+                os.remove(os.path.join(OUT, p))
+    pd.DataFrame(removed).to_csv(os.path.join(OUT, "removed_records.csv"), index=False)
+    print(f"quality removals: {len(bad)}; duplicate-sequence removals: {len(dup)}")
     mp = mp[mp.sample_id.isin(master.sample_id)]
     miss = miss[miss.sample_id.isin(master.sample_id)]
-    print(f"resolution filter <= {args.max_resolution} A: kept {len(master)} of {n0}; dropped {len(dropped)} "
+    print(f"resolution filter <= {args.max_resolution} A: dropped {len(dropped)} of {n0} "
           f"({(r > args.max_resolution).sum()} worse than cutoff, {r.isna().sum()} without resolution)")
     master.to_csv(os.path.join(OUT, "master.csv"), index=False)
     mp.to_csv(os.path.join(OUT, "residue_mapping.csv.gz"), index=False)
