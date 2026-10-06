@@ -1,12 +1,12 @@
 """Acceptance checks (spec section 10) and qc_report.md."""
-import collections, os
+import collections, os, re
 import numpy as np
 import pandas as pd
 
 BB = ("N", "CA", "C", "O")
 
 
-def run(out, samples, formal, entry_rows, failed, ids, aln_rows, col_names, status):
+def run(out, samples, formal, entry_rows, excluded, ids, aln_rows, col_names, status, n_all):
     checks = collections.OrderedDict()
     fails = collections.defaultdict(list)
     mp = pd.read_csv(os.path.join(out, "residue_mapping.tsv.gz"), sep="\t", keep_default_na=False)
@@ -75,34 +75,32 @@ def run(out, samples, formal, entry_rows, failed, ids, aln_rows, col_names, stat
     L.append("| stage | n |\n|---|---|")
     L.append(f"| candidate PDB entries | {len(ids)} |")
     L.append(f"| downloaded (mmCIF + FASTA) | {n_dl} |")
-    L.append(f"| entries with >=1 AbNumber heavy V domain | {md.pdb_id.nunique() if len(md) else 0} |")
-    L.append(f"| heavy-domain samples (all chain copies) | {len(md)} |")
+    L.append(f"| heavy-domain samples before strict cleaning (all chain copies) | {n_all} |")
+    L.append(f"| removed (rows in excluded.tsv, incl. entry-level failures) | {len(excluded)} |")
+    L.append(f"| **clean samples kept** | {len(md)} |")
     if len(md):
-        L.append(f"| samples with all residues mapped (no mapping problem) | {(md.mapping_problems == '').sum()} |")
-        L.append(f"| **formal samples** | {(md.status == 'formal').sum()} |")
-        L.append(f"| formal representative samples (1 per entry x heavy sequence) | {((md.status == 'formal') & md.is_representative).sum()} |")
-        L.append(f"| entries with >=1 formal sample | {md[md.status == 'formal'].pdb_id.nunique()} |")
-        L.append(f"| review samples | {(md.status == 'review').sum()} |")
-    L.append("\n## Review / failure reasons\n")
-    fr = pd.DataFrame(failed)
-    if len(fr):
+        L.append(f"| clean representative samples (1 per entry x heavy sequence) | {int(md.is_representative.sum())} |")
+        L.append(f"| entries with >=1 clean sample | {md.pdb_id.nunique()} |")
+    L.append("\n## Why records were removed (`excluded.tsv`)\n")
+    if len(excluded):
         reasons = collections.Counter()
-        for r in fr.itertuples():
-            for part in str(r.reason).split(" | "):
-                reasons[(r.stage, part.split(":")[0])] += 1
-        L.append("| stage | reason | n |\n|---|---|---|")
-        for (st, rs), n in reasons.most_common():
-            L.append(f"| {st} | {rs} | {n} |")
+        for r in excluded:
+            for part in str(r["reason"]).split(" | "):
+                key = part.split(": ")[0] if ": " in part else re.sub(r"=\S+", "=x", part)
+                reasons[re.sub(r" [A-Z0-9,]+$", "", key)[:80]] += 1
+        L.append("| reason (a sample can have several) | n |\n|---|---|")
+        for rs, n in reasons.most_common():
+            L.append(f"| {rs} | {n} |")
     else:
         L.append("none")
     if len(md):
-        L.append("\n## Domain type (formal samples)\n")
-        f = md[md.status == "formal"]
+        L.append("\n## Domain type (clean samples)\n")
+        f = md
         L.append("| domain_type | samples | entries |\n|---|---|---|")
         for t, g in f.groupby("domain_type"):
             L.append(f"| {t} | {len(g)} | {g.pdb_id.nunique()} |")
         L.append("\nVHH is assigned only from an explicit entity annotation (nanobody/VHH/sybody/single-domain antibody). AbNumber H type alone is not used as VHH evidence.\n")
-        L.append("## Missing-coordinate statistics (formal samples)\n")
+        L.append("## Missing-coordinate statistics (clean samples)\n")
         fm = miss[miss.sample_id.isin(set(f.sample_id))] if len(miss) else miss
         L.append("| reason | atom records |\n|---|---|")
         for rs, n in fm.reason.value_counts().items():
@@ -112,7 +110,7 @@ def run(out, samples, formal, entry_rows, failed, ids, aln_rows, col_names, stat
                  f"({100*f.n_residues_with_coords.sum()/max(tot,1):.2f}%); full backbone: {f.n_full_backbone.sum()} "
                  f"({100*f.n_full_backbone.sum()/max(tot,1):.2f}%). Samples with >=1 missing residue: "
                  f"{(f.n_residues_with_coords < f.L).sum()}.\n")
-        L.append(f"Chothia alignment: {len(col_names)} common columns over {len(aln_rows)} formal samples.\n")
+        L.append(f"Chothia alignment: {len(col_names)} common columns over {len(aln_rows)} clean samples.\n")
     L.append("## Acceptance checks\n")
     L.append("| # | check | result |\n|---|---|---|")
     for k, (n, r) in checks.items():

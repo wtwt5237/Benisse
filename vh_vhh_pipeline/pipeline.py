@@ -212,6 +212,9 @@ def atom_rows_for(block, asyms):
 
 
 # ---------------------------------------------------------------- numbering
+CLASSIFIED = {}  # entity key -> V-domain chain types from the IMGT classification pass
+
+
 def parse_domains(seqs):
     """seqs: dict key -> full sequence. Returns key -> list of domain dicts (all chain types)."""
     keys = list(seqs)
@@ -226,6 +229,7 @@ def parse_domains(seqs):
         ab_keys = []
         for k, al in zip(chunk, cls_ali):
             types = [a["chain_type"] for a in (al or [])]
+            CLASSIFIED[k] = types
             if types and all(t in "HKL" for t in types):
                 ab_keys.append(k)
             elif types:
@@ -271,6 +275,49 @@ def parse_domains(seqs):
                                    boundary_check="ok" if ok else
                                    f"boundary_mismatch abnumber={ch.seq} slice={dom_seq} anarci={resid}"))
     return out, errs
+
+
+AB_KW = re.compile(r"heavy|\bfab\b|antibod|nanobod|\bvhh|scfv|\big[gmae]\d?\b|mab\b|immunoglobulin|\bfv\b|\bvh\b|"
+                   r"sybod|\bsdab|single[- ]domain|\bhc\b|\bnb[\d\- ]", re.I)
+CONTRA = re.compile(r"light|kappa|lambda|\blc\b|t[- ]cell receptor|\btcr\b|\bmhc\b|\bhla\b", re.I)
+HEAVY_WORD = re.compile(r"heavy|\bvh\b|nanobod|\bvhh|sybod", re.I)
+CHAIN_LIST_ONLY = re.compile(r"^\s*Chains?:\s*[A-Za-z0-9, ]+$")
+TITLE_AB = re.compile(r"nanobod|antibod|\bfab\b|\bvhh|sybod|scfv|single[- ]domain", re.I)
+STD_INS = re.compile(r"H(31|35|52|82|100)[A-Z]$")
+
+
+def strict_reasons(s, manual):
+    why = []
+    if s["status"] != "formal":
+        why.append("pipeline_review: " + s["status_reason"])
+    key = (s["pdb_id"], str(s["entity_id"]))
+    types = CLASSIFIED.get(f"{s['pdb_id']}|{s['entity_id']}", [])
+    if any(t not in "HKL" for t in types):
+        why.append(f"entity has non-antibody V domain types {types}")
+    d = s["entity_description"]
+    if key in manual:
+        dec, r = manual[key]
+        if dec != "keep":
+            why.append(f"manual review: {r}")
+    else:
+        if CONTRA.search(d) and not HEAVY_WORD.search(d):
+            why.append(f"description contradicts heavy chain: '{d}'")
+        elif CHAIN_LIST_ONLY.match(d):
+            if not TITLE_AB.search(s.get("title", "")):
+                why.append(f"description is only a chain list and title names no antibody: '{d}'")
+        elif not AB_KW.search(d):
+            why.append(f"description does not name an antibody (unreviewed): '{d}'")
+    pos = [r["chothia_pos"] for r in s["rows"]]
+    aa = {r["chothia_pos"]: r["aa"] for r in s["rows"]}
+    if pos[0] != "H1" or pos[-1] != "H113":
+        why.append("Chothia numbering not H1..H113")
+    for p, want in (("H22", "C"), ("H36", "W"), ("H92", "C")):
+        if aa.get(p) != want:
+            why.append(f"{p}={aa.get(p, '-')} (expected {want})")
+    odd = [p for p in pos if re.match(r"H\d+[A-Z]$", p) and not STD_INS.match(p)]
+    if odd:
+        why.append("non-standard Chothia insertions " + ",".join(odd))
+    return why
 
 
 # ---------------------------------------------------------------- export
@@ -417,7 +464,7 @@ def main():
         n_before, nf_before = len(samples), len(full_fa)
         try:
             d = parsed[p]
-            has_light = any(dm["chain_type"] in "KL" for k, v in doms.items() if k.startswith(p + "|") for dm in v)
+            has_light = any(t in "KL" for k, v in CLASSIFIED.items() if k.startswith(p + "|") for t in v)
             heavy = [(eid, dm) for eid in d["ents"] for dm in doms.get(f"{p}|{eid}", []) if dm["chain_type"] == "H"]
             for eid in d["ents"]:
                 err = derr.get(f"{p}|{eid}")
@@ -447,6 +494,8 @@ def main():
                 hallmark = {f"H{n}": ch[f"H{n}"] if f"H{n}" in [pp.format() for pp, _ in positions] else "-" for n in (37, 44, 45, 47)}
                 if VHH_KW.search(e["description"]):
                     dtype, evidence = "VHH", f"entity description: {e['description']}"
+                elif CHAIN_LIST_ONLY.match(e["description"]) and VHH_KW.search(d["info"]["title"]) and not has_light:
+                    dtype, evidence = "VHH", f"entity description is only a chain list; entry title: {d['info']['title']}; no light-chain V domain in entry"
                 elif has_light:
                     dtype, evidence = "VH", "light-chain V domain present in entry (pairing not verified)"
                 else:
@@ -544,6 +593,35 @@ def main():
             failed.append(dict(stage="processing", error_type=type(ex).__name__, reason=repr(ex)[:500], pdb_id=p,
                                sample_id="", attempted_fix="entry isolated; batch continued; traceback: "
                                + traceback.format_exc().strip().splitlines()[-2].strip()))
+    # strict cleaning: only samples that are certainly antibody heavy-chain V domains with valid numbering
+    # and mapping are kept; everything else is deleted from the cleaned records (IDs + reasons -> excluded.tsv)
+    manual = {}
+    mpath = os.path.join(ROOT, "vh_vhh_pipeline", "manual_review.tsv")
+    if os.path.exists(mpath):
+        mr = pd.read_csv(mpath, sep="\t", keep_default_na=False)
+        manual = {(r.pdb_id, str(r.entity_id)): (r.decision, r.reason) for r in mr.itertuples()}
+    excluded = []
+    kept = []
+    for s in samples:
+        why = strict_reasons(s, manual)
+        if why:
+            excluded.append(dict(pdb_id=s["pdb_id"], sample_id=s["sample_id"], entity_description=s["entity_description"],
+                                 reason=" | ".join(why)))
+        else:
+            kept.append(s)
+    for fr in failed:
+        if fr["stage"] in ("download", "parse", "processing"):
+            excluded.append(dict(pdb_id=fr["pdb_id"], sample_id=fr["sample_id"], entity_description="",
+                                 reason=f"{fr['stage']}: {fr['reason']}"))
+    for e in entry_rows:
+        e["n_clean_samples"] = sum(1 for s in kept if s["pdb_id"] == e["pdb_id"])
+        if e.get("entry_status") == "processed" and e["n_clean_samples"] == 0:
+            e["entry_status"] = "removed_by_strict_cleaning"
+    n_all = len(samples)
+    samples = kept
+    pd.DataFrame(excluded, columns=["pdb_id", "sample_id", "entity_description", "reason"]).to_csv(
+        os.path.join(out, "excluded.tsv"), sep="\t", index=False)
+
     # representative copy per (entry, heavy V sequence)
     for key in {(s["pdb_id"], s["variable_sequence"]) for s in samples}:
         grp = [s for s in samples if (s["pdb_id"], s["variable_sequence"]) == key]
@@ -650,14 +728,11 @@ def main():
     pd.DataFrame(entry_rows).to_csv(os.path.join(out, "entries.tsv"), sep="\t", index=False)
     pd.DataFrame(map_rows).to_csv(os.path.join(out, "residue_mapping.tsv.gz"), sep="\t", index=False)
     pd.DataFrame(miss_rows).to_csv(os.path.join(out, "missing_atoms.tsv.gz"), sep="\t", index=False)
-    for s in samples:
-        if s["status"] != "formal":
-            failed.append(dict(stage="sample_qc", error_type="review", reason=s["status_reason"], pdb_id=s["pdb_id"],
-                               sample_id=s["sample_id"], attempted_fix=""))
-    pd.DataFrame(failed, columns=["stage", "error_type", "reason", "pdb_id", "sample_id", "attempted_fix"]).to_csv(
-        os.path.join(out, "failed_or_review.tsv"), sep="\t", index=False)
+    full_fa = {}
+    for smp in samples:  # full submitted sequence of every kept heavy entity
+        full_fa.setdefault(f"{smp['pdb_id']}_{smp['entity_id']}", (smp["fasta_header"], smp["full_chain_sequence"]))
     with open(os.path.join(out, "full_chain.fasta"), "w") as f:
-        f.writelines(f">{h}\n{s}\n" for h, s in full_fa)
+        f.writelines(f">{k}|{h}\n{q}\n" for k, (h, q) in full_fa.items())
     with open(os.path.join(out, "variable.fasta"), "w") as f:
         f.writelines(f">{h}\n{s}\n" for h, s in var_fa)
     pd.DataFrame(dl_log).to_csv(os.path.join(out, "download_log.tsv"), sep="\t", index=False)
@@ -666,7 +741,7 @@ def main():
 
     # 7. QC
     import qc
-    qc.run(out, samples, formal, entry_rows, failed, ids, aln_rows, col_names, status)
+    qc.run(out, samples, formal, entry_rows, excluded, ids, aln_rows, col_names, status, n_all)
 
 
 if __name__ == "__main__":

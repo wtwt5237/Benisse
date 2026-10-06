@@ -2,7 +2,16 @@
   "candidate_table": "pdb_ab_nb_after_2024-09-09_novel_vs_train_val_fulllength.csv",
   "candidate_table_note": "1,320 PDB entries: antibody/nanobody keyword hits released after 2024-09-09 (latest of AF3, Chai-1, ESM3, IgFold, RFAA), one distinct heavy V domain (IMGT/ANARCI screen), >10% normalized Levenshtein distance from train+val heavy chains, full-length IMGT 1-128. This pipeline re-derives everything from the original mmCIF/FASTA and does not reuse the IMGT sequences from that table.",
   "output_dir": "vh_vhh_data",
-  "numbering": {"tool": "AbNumber (ANARCI backend)", "scheme": "chothia", "cdr_definition": "chothia", "allowed_species": null},
+  "numbering": {
+    "tool": "AbNumber (ANARCI backend)",
+    "scheme": "chothia",
+    "cdr_definition": "chothia",
+    "allowed_species": [
+      "human",
+      "mouse"
+    ],
+    "allowed_species_note": "ANARCI default. With all species allowed, ANARCI chose the rhesus HMM for 47 unique heavy sequences and shifted their Chothia numbering (Cys22->H23, Cys92->H94); human+mouse numbers all of them correctly and leaves the other sequences valid."
+  },
   "sources": {
     "mmcif": "https://files.rcsb.org/download/{PDB_ID}.cif.gz",
     "fasta_entry": "https://www.rcsb.org/fasta/entry/{PDB_ID}/download"
@@ -12,8 +21,12 @@
   "zero_occupancy_counts_as_observed": false,
   "include_all_copies_of_heavy_entity": true,
   "representative_rule": "per PDB entry and heavy-domain sequence: copy with most complete backbone atoms, ties broken by label_asym_id order",
-  "formal_set_requires": ["mapping_status ok for every residue with coordinates", "no unexplained residue mismatch", "full submitted sequence available and consistent between FASTA and mmCIF"],
-  "domain_type_rule": "VHH if the heavy entity description mentions nanobody/VHH/sybody/single-domain antibody; VH if no such annotation and a light-chain V domain (AbNumber K/L) exists in the same entry; otherwise unknown. AbNumber H type alone is not treated as VHH evidence.",
+  "formal_set_requires": [
+    "mapping_status ok for every residue with coordinates",
+    "no unexplained residue mismatch",
+    "full submitted sequence available and consistent between FASTA and mmCIF"
+  ],
+  "domain_type_rule": "VHH if the heavy entity description mentions nanobody/VHH/sybody/single-domain antibody, or the description is only a chain list, the entry title names a nanobody and the entry has no light-chain V domain; VH if no VHH annotation and a light-chain V domain (IMGT classification K/L) exists in the same entry; otherwise unknown. AbNumber H type alone is not treated as VHH evidence.",
   "not_restricted": {
     "species": "not restricted",
     "resolution": "not restricted",
@@ -21,5 +34,12 @@
     "antigen_presence": "not restricted",
     "structural_completeness_threshold": "not restricted (missing residues/atoms are annotated, not filtered)",
     "duplicate_sequences": "kept; duplicate groups recorded"
+  },
+  "strict_clean_rules": {
+    "removed_not_kept": "Samples failing any rule below are deleted from the cleaned records (tables, FASTA, alignment, samples/). Only their IDs and reasons are listed in excluded.tsv.",
+    "1_heavy_chain_bcr": "AbNumber chain type H; entry-level IMGT classification shows no TCR/other V domain in this entity",
+    "2_description": "entity description names an antibody (heavy/Fab/antibody/nanobody/VHH/scFv/Ig/mAb/Fv/VH/sybody/sdAb/Nb...) and does not call the entity a light chain, TCR, MHC/HLA; descriptions that are only chain lists ('Chains: X') are accepted when the entry title names a nanobody/antibody/Fab; fusion constructs whose description names a non-antibody protein are removed",
+    "3_numbering": "Chothia H1..H113 complete; Cys at H22 and H92, Trp at H36; insertions only at standard Chothia heavy sites H31, H52, H82, H100 (plus H35)",
+    "4_mapping": "pipeline status formal (no sequence/structure mismatch, ambiguous mapping, sequence-source conflict; coordinates present)"
   }
 }
