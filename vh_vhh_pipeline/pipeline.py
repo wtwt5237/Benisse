@@ -362,7 +362,8 @@ def main():
                         mmcif_url=CFG["sources"]["mmcif"].format(PDB_ID=p),
                         fasta_url=CFG["sources"]["fasta_entry"].format(PDB_ID=p),
                         retrieved=datetime.datetime.fromtimestamp(os.path.getmtime(cif), datetime.timezone.utc).isoformat(timespec="seconds"))
-            parsed[p] = dict(block=block, info=info, ents=ents, scheme=scheme, ur=ur, ua=ua)
+            del block  # keep only extracted metadata; the file is re-read per entry later (memory)
+            parsed[p] = dict(cif=cif, info=info, ents=ents, scheme=scheme, ur=ur, ua=ua)
         except Exception as e:
             status[p] = "parse_failed"
             failed.append(dict(stage="parse", error_type="parse_failed", reason=repr(e), pdb_id=p, sample_id="",
@@ -389,6 +390,8 @@ def main():
             elif err:
                 failed.append(dict(stage="numbering", error_type="numbering_error", reason=err,
                                    pdb_id=p, sample_id=f"{p}_{eid}", attempted_fix=""))
+        heavy_asyms = {a for eid, _ in heavy for a in d["ents"][eid]["asyms"]}
+        entry_atoms = atom_rows_for(gemmi.cif.read(d["cif"]).sole_block(), heavy_asyms) if heavy_asyms else {}
         distinct = sorted({dm["chain"].seq for _, dm in heavy})
         entry_issue = []
         if not heavy:
@@ -412,7 +415,7 @@ def main():
             else:
                 dtype, evidence = "unknown", "no VHH annotation on entity and no light-chain V domain in entry"
             for asym in e["asyms"]:
-                rows_all = atom_rows_for(d["block"], {asym}).get(asym, [])
+                rows_all = entry_atoms.get(asym, [])
                 models = sorted({r["model"] for r in rows_all})
                 model = models[0] if models else 1
                 rows = [r for r in rows_all if r["model"] == model]
