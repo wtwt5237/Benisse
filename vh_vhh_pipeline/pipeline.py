@@ -27,7 +27,10 @@ from mapping import map_chain, BACKBONE  # noqa: E402
 warnings.filterwarnings("ignore", category=UserWarning)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CFG = json.load(open(os.path.join(ROOT, "vh_vhh_pipeline", "config.json")))
-VHH_KW = re.compile(r"nanobod|\bvhh\b|sybod|single[- ]domain antibod|\bsdab\b|heavy[- ]chain[- ]only", re.I)
+VHH_KW = re.compile(r"nanobod|vhh|sybod|single[- ]domain antibod|sdab|heavy[- ]chain[- ]only|\bnb[\d\-]|\bnb\b", re.I)
+# "heavy chain antibody" (HCAb) wording is VHH evidence only when the entry has no light-chain V domain,
+# because a conventional Fab heavy chain can be described similarly
+HCAB_KW = re.compile(r"heavy[- ]chain antibod|variable domain of (the )?heavy[- ]chain antibod", re.I)
 
 
 def now():
@@ -277,8 +280,8 @@ def parse_domains(seqs):
     return out, errs
 
 
-AB_KW = re.compile(r"heavy|\bfab\b|antibod|nanobod|\bvhh|scfv|\big[gmae]\d?\b|mab\b|immunoglobulin|\bfv\b|\bvh\b|"
-                   r"sybod|\bsdab|single[- ]domain|\bhc\b|\bnb[\d\- ]", re.I)
+AB_KW = re.compile(r"heavy|fab|antibod|nanobod|vhh|scfv|\big[gmaeh]\d?\b|mab\b|immunoglobulin|\bfv\b|\bvh\b|"
+                   r"sybod|sdab|single[- ]domain|\bhc\b|\bh chain|\bnb[\d\- ]|\bnb\b", re.I)
 CONTRA = re.compile(r"light|kappa|lambda|\blc\b|t[- ]cell receptor|\btcr\b|\bmhc\b|\bhla\b", re.I)
 HEAVY_WORD = re.compile(r"heavy|\bvh\b|nanobod|\bvhh|sybod", re.I)
 CHAIN_LIST_ONLY = re.compile(r"^\s*Chains?:\s*[A-Za-z0-9, ]+$")
@@ -296,9 +299,11 @@ def strict_reasons(s, manual):
         why.append(f"entity has non-antibody V domain types {types}")
     d = s["entity_description"]
     if key in manual:
-        dec, r = manual[key]
+        dec, r, dt = manual[key]
         if dec != "keep":
             why.append(f"manual review: {r}")
+        elif dt:
+            s["domain_type"], s["domain_type_evidence"] = dt, f"manual review of entry ({r})"
     else:
         if CONTRA.search(d) and not HEAVY_WORD.search(d):
             why.append(f"description contradicts heavy chain: '{d}'")
@@ -492,7 +497,7 @@ def main():
                 first, last = positions[0][0], positions[-1][0]
                 complete = first.number == 1 and last.number == 113 and not first.letter and not last.letter
                 hallmark = {f"H{n}": ch[f"H{n}"] if f"H{n}" in [pp.format() for pp, _ in positions] else "-" for n in (37, 44, 45, 47)}
-                if VHH_KW.search(e["description"]):
+                if VHH_KW.search(e["description"]) or (HCAB_KW.search(e["description"]) and not has_light):
                     dtype, evidence = "VHH", f"entity description: {e['description']}"
                 elif CHAIN_LIST_ONLY.match(e["description"]) and VHH_KW.search(d["info"]["title"]) and not has_light:
                     dtype, evidence = "VHH", f"entity description is only a chain list; entry title: {d['info']['title']}; no light-chain V domain in entry"
@@ -599,7 +604,7 @@ def main():
     mpath = os.path.join(ROOT, "vh_vhh_pipeline", "manual_review.tsv")
     if os.path.exists(mpath):
         mr = pd.read_csv(mpath, sep="\t", keep_default_na=False)
-        manual = {(r.pdb_id, str(r.entity_id)): (r.decision, r.reason) for r in mr.itertuples()}
+        manual = {(r.pdb_id, str(r.entity_id)): (r.decision, r.reason, r.domain_type) for r in mr.itertuples()}
     excluded = []
     kept = []
     for s in samples:

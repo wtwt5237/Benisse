@@ -1,0 +1,34 @@
+pdb_id	entity_id	entity_description	decision	domain_type	reason
+9II9	1	antigen-binding fragments (Fabs)	keep		title: SARS-CoV-2 neutralizing antibody K4-66
+8QGX	2	NbE201	keep	VHH	title: nanobody NbE201
+8QGZ	1	NbE201	keep	VHH	title: NbE201 a nanobody
+8XQJ	1	JN241	keep		title: dimeric APJR complex with antagonistic antibody
+9LDS	1	H145	keep	VHH	title: nanobody H145
+8YY6	1	Fab5 H chain	keep		title: monoclonal antibody Fab5
+9M5D	1	n501	keep	VHH	title: human single-domain antibody
+9H8H	1	DC11	keep		title: DC11 anti tau antibody Fab fragment
+9IAT	1	Bc8.121-Fab_IgH	keep		title: Bc8.121 Fab; description IgH
+9LH2	2	MNb-11	keep	VHH	title: pH-dependent nanobody
+9LME	2	T3CL11	keep	VHH	title: in complex with a nanobody
+9GEI	2	CP33-H/L-LA22	keep		title: monoclonal antibody CP33
+9AXW	2	NbJRi	keep	VHH	title: Nanobody NbJRI
+9UO0	2	Tnb165	keep	VHH	title: nanobody Tnb165
+9URM	2	YDF H chain	keep		title: single chain antibody YDF; description H chain
+9UUF	2	Tnb438	keep	VHH	title: nanobody Tnb438
+9U00	1	NbH10	keep	VHH	title: NbH10, a nanobody
+9TZZ	1	NbC03	keep	VHH	title: NbC03, a nanobody
+9UHQ	3	BA5-39-H	keep		title: antibody BA5-39; description -H
+9UHF	2	BA5-12-H	keep		title: antibody BA5-12; description -H
+9UHG	2	BA5-12-CDR1-H	keep		title: antibody BA5-12-CDR1; description -H
+9Q5H	1	FabB2G1 H chain	keep		title: anti-HPA-1a Fab B2G1
+9Q4L	1	FAb26.4 H chain	keep		title: anti-HPA-1a Fab 26.4
+27UH	1	S100A4_VHH-N20	keep	VHH	title: de novo-designed VHH
+9T5Q	2	Sb4	keep	VHH	title: synthetic nanobody Sb4
+9T5N	2	Sb1	keep	VHH	title: synthetic nanobody Sb1
+9R6H	1	Genome polyprotein,Mis18-binding protein 1,Chains: A	remove		EGFP-SANTA-nanobody fusion construct, not an antibody heavy-chain entity
+9T5P	3	Volume-regulated anion channel subunit LRRC8D	remove		heavy V domain annotated as LRRC8D channel subunit; annotation conflict
+8VGK	3	Fab E104.v1.6DS light chain	remove		entity annotated light chain but numbers as heavy; label swap
+8W2E	3	Fab B Light Chain	remove		entity annotated light chain but numbers as heavy; label swap
+9FYT	2	Light chain scFv A01	remove		entity annotated light chain but numbers as heavy; label swap
+9IA4	2	Light chain	remove		entity annotated light chain but numbers as heavy; label swap
+9XY4	3	MEDI3622 Fab Light Chain	remove		entity annotated light chain but numbers as heavy; label swap
