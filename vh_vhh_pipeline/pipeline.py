@@ -412,126 +412,136 @@ def main():
         if p not in parsed:
             entry_rows.append(dict(pdb_id=p, entry_status=status[p]))
             continue
-        d = parsed[p]
-        has_light = any(dm["chain_type"] in "KL" for k, v in doms.items() if k.startswith(p + "|") for dm in v)
-        heavy = [(eid, dm) for eid in d["ents"] for dm in doms.get(f"{p}|{eid}", []) if dm["chain_type"] == "H"]
-        for eid in d["ents"]:
-            err = derr.get(f"{p}|{eid}")
-            if err and err.startswith("Variable chain sequence not recognized"):
-                d["ents"][eid]["antibody_domain"] = "none (not an antibody V domain)"
-            elif err:
-                failed.append(dict(stage="numbering", error_type="numbering_error", reason=err,
-                                   pdb_id=p, sample_id=f"{p}_{eid}", attempted_fix=""))
-        heavy_asyms = {a for eid, _ in heavy for a in d["ents"][eid]["asyms"]}
-        entry_atoms = atom_rows_for(gemmi.cif.read(d["cif"]).sole_block(), heavy_asyms) if heavy_asyms else {}
-        distinct = sorted({dm["chain"].seq for _, dm in heavy})
-        entry_issue = []
-        if not heavy:
-            entry_issue.append("no_heavy_domain_found")
-        if len(distinct) > 1:
-            entry_issue.append(f"{len(distinct)}_distinct_heavy_domains")
-        if prior_seq.get(p) not in distinct:
-            entry_issue.append("chothia_domain_differs_from_screening_sequence")
-        for eid, dm in heavy:
-            e = d["ents"][eid]
-            ch = dm["chain"]
-            positions = list(ch)
-            assert "".join(aa for _, aa in positions) == ch.seq
-            first, last = positions[0][0], positions[-1][0]
-            complete = first.number == 1 and last.number == 113 and not first.letter and not last.letter
-            hallmark = {f"H{n}": ch[f"H{n}"] if f"H{n}" in [pp.format() for pp, _ in positions] else "-" for n in (37, 44, 45, 47)}
-            if VHH_KW.search(e["description"]):
-                dtype, evidence = "VHH", f"entity description: {e['description']}"
-            elif has_light:
-                dtype, evidence = "VH", "light-chain V domain present in entry (pairing not verified)"
-            else:
-                dtype, evidence = "unknown", "no VHH annotation on entity and no light-chain V domain in entry"
-            for asym in e["asyms"]:
-                rows_all = entry_atoms.get(asym, [])
-                models = sorted({r["model"] for r in rows_all})
-                model = models[0] if models else 1
-                rows = [r for r in rows_all if r["model"] == model]
-                mapped, issues = map_chain(e["poly_seq"], d["scheme"].get(asym, {}), rows,
-                                           d["ur"].get((asym, model)), d["ua"].get((asym, model)))
-                auth_asym = sorted({r["auth_asym_id"] for r in rows}) or [
-                    (d["scheme"].get(asym, {}).get(1) or {}).get("strand_id") or ""]
-                sid = f"{p}_e{eid}_{asym}_m{model}_d{dm['domain_index']}"
-                elem = {}
-                bfac = {}
-                for r in rows:
-                    if r["label_seq_id"] is not None and r["atom"] in BACKBONE:
-                        elem.setdefault(r["label_seq_id"], {})[r["atom"]] = r["element"]
-                        bfac.setdefault(r["label_seq_id"], {})[r["atom"]] = r["b"]
-                srows = []
-                for i, (pos, aa) in enumerate(positions):
-                    num = dm["start0"] + i + 1  # 1-based position in full submitted sequence == entity_poly_seq.num
-                    m = mapped[num]
-                    can_aa = e["can"][num - 1]
-                    st = m["mapping_status"]
-                    norm = ""
-                    nonstd = [c for c in m["seq_mon_ids"].split(",") if c not in STANDARD]
-                    for comp in nonstd:
-                        try:
-                            par, one, nm = ccd_parent(comp, raw, dl_log)
-                        except Exception as ex:
-                            par, one, nm = "", "", f"CCD lookup failed: {ex}"
-                        norm += f"{comp}({nm})->{can_aa} via _entity_poly.pdbx_seq_one_letter_code_can; CCD parent={par or '?'} one_letter={one or '?'};"
-                        if one.strip().upper() != can_aa and st.startswith("ok"):
-                            st = "modified_residue_parent_conflict"
-                        elif st == "ok":
-                            st = "ok_modified_residue"
-                    if can_aa != aa:
-                        st = "mismatch_sequence_vs_numbering"
-                    srows.append(dict(m, sample_id=sid, full_seq_idx1=num, seq_idx1=i + 1, aa=aa,
-                                      chothia_pos=pos.format(), region=pos.get_region(), entity_id=eid,
-                                      label_asym_id=asym, auth_asym_id=",".join(x for x in auth_asym if x),
-                                      model_id=model, mapping_status=st, residue_normalization=norm,
-                                      elements={n: elem.get(num, {}).get(n, n[0]) for n in BACKBONE},
-                                      b={n: bfac.get(num, {}).get(n) or 0.0 for n in BACKBONE}))
-                L = len(srows)
-                bad = sorted({r["mapping_status"] for r in srows if not r["mapping_status"].startswith("ok")})
-                n_valid = sum(r["atoms"][n]["valid"] for r in srows for n in BACKBONE)
-                sample = dict(sample_id=sid, pdb_id=p, entity_id=eid, label_asym_id=asym,
-                              auth_asym_id=",".join(x for x in auth_asym if x), model_id=model,
-                              n_models=len(models), domain_id=f"d{dm['domain_index']}",
-                              domain_type=dtype, domain_type_evidence=evidence,
-                              vhh_hallmark_chothia=";".join(f"{k}:{v}" for k, v in hallmark.items()),
-                              entity_description=e["description"], full_chain_length=len(e["can"]),
-                              domain_start_full_idx1=dm["start0"] + 1, domain_end_full_idx1=dm["end0"] + 1,
-                              n_term_prefix_removed=dm["start0"], c_term_removed=len(e["can"]) - dm["end0"] - 1,
-                              L=L, variable_sequence=ch.seq, full_chain_sequence=e["can"],
-                              sequence_source="RCSB entry FASTA; verified vs _entity_poly.pdbx_seq_one_letter_code_can and _entity_poly_seq",
-                              fasta_header=e["fasta_header"], sequence_issues=";".join(e["issues"]),
-                              boundary_check=dm["boundary_check"], chothia_complete_H1_H113=complete,
-                              n_residues_with_coords=sum(r["coordinate_record_present"] for r in srows),
-                              n_full_backbone=sum(all(r["atoms"][n]["valid"] for n in BACKBONE) for r in srows),
-                              n_valid_backbone_atoms=n_valid, mapping_problems=";".join(bad),
-                              chain_issues=";".join(f"{a}:{b}" for a, b in issues[:5]),
-                              entry_issues=";".join(entry_issue), rows=srows, **d["info"])
-                reasons = []
-                if e["issues"]:
-                    reasons.append("sequence_source:" + ";".join(e["issues"]))
-                if dm["boundary_check"] != "ok":
-                    reasons.append("domain_boundary")
-                if bad:
-                    reasons.append("mapping:" + ";".join(bad))
-                if issues:
-                    reasons.append("chain_mapping_issues")
-                if not complete:
-                    reasons.append("v_domain_not_complete_H1_to_H113")
-                if entry_issue:
-                    reasons.append("entry:" + ";".join(entry_issue))
-                if sample["n_residues_with_coords"] == 0:
-                    reasons.append("no_coordinates")
-                sample["status"] = "formal" if not reasons else "review"
-                sample["status_reason"] = " | ".join(reasons)
-                samples.append(sample)
-        entry_rows.append(dict(pdb_id=p, entry_status="processed", n_heavy_domain_samples=sum(1 for s in samples if s["pdb_id"] == p),
-                               entry_issues=";".join(entry_issue), **d["info"]))
-        for eid, e in d["ents"].items():
-            if e["type"].startswith("polypeptide"):
-                full_fa.append((f"{p}_{eid}|asyms={','.join(e['asyms'])}|{e['fasta_header']}", e["can"]))
+        n_before, nf_before = len(samples), len(full_fa)
+        try:
+            d = parsed[p]
+            has_light = any(dm["chain_type"] in "KL" for k, v in doms.items() if k.startswith(p + "|") for dm in v)
+            heavy = [(eid, dm) for eid in d["ents"] for dm in doms.get(f"{p}|{eid}", []) if dm["chain_type"] == "H"]
+            for eid in d["ents"]:
+                err = derr.get(f"{p}|{eid}")
+                if err and err.startswith("Variable chain sequence not recognized"):
+                    d["ents"][eid]["antibody_domain"] = "none (not an antibody V domain)"
+                elif err:
+                    failed.append(dict(stage="numbering", error_type="numbering_error", reason=err,
+                                       pdb_id=p, sample_id=f"{p}_{eid}", attempted_fix=""))
+            heavy_asyms = {a for eid, _ in heavy for a in d["ents"][eid]["asyms"]}
+            entry_atoms = atom_rows_for(gemmi.cif.read(d["cif"]).sole_block(), heavy_asyms) if heavy_asyms else {}
+            distinct = sorted({dm["chain"].seq for _, dm in heavy})
+            entry_issue = []
+            if not heavy:
+                entry_issue.append("no_heavy_domain_found")
+            if len(distinct) > 1:
+                entry_issue.append(f"{len(distinct)}_distinct_heavy_domains")
+            if prior_seq.get(p) not in distinct:
+                entry_issue.append("chothia_domain_differs_from_screening_sequence")
+            for eid, dm in heavy:
+                e = d["ents"][eid]
+                ch = dm["chain"]
+                positions = list(ch)
+                if not positions or "".join(aa for _, aa in positions) != ch.seq:
+                    raise ValueError(f"AbNumber returned no/inconsistent positions for {p} entity {eid} domain {dm['domain_index']}")
+                first, last = positions[0][0], positions[-1][0]
+                complete = first.number == 1 and last.number == 113 and not first.letter and not last.letter
+                hallmark = {f"H{n}": ch[f"H{n}"] if f"H{n}" in [pp.format() for pp, _ in positions] else "-" for n in (37, 44, 45, 47)}
+                if VHH_KW.search(e["description"]):
+                    dtype, evidence = "VHH", f"entity description: {e['description']}"
+                elif has_light:
+                    dtype, evidence = "VH", "light-chain V domain present in entry (pairing not verified)"
+                else:
+                    dtype, evidence = "unknown", "no VHH annotation on entity and no light-chain V domain in entry"
+                for asym in e["asyms"]:
+                    rows_all = entry_atoms.get(asym, [])
+                    models = sorted({r["model"] for r in rows_all})
+                    model = models[0] if models else 1
+                    rows = [r for r in rows_all if r["model"] == model]
+                    mapped, issues = map_chain(e["poly_seq"], d["scheme"].get(asym, {}), rows,
+                                               d["ur"].get((asym, model)), d["ua"].get((asym, model)))
+                    auth_asym = sorted({r["auth_asym_id"] for r in rows}) or [
+                        (d["scheme"].get(asym, {}).get(1) or {}).get("strand_id") or ""]
+                    sid = f"{p}_e{eid}_{asym}_m{model}_d{dm['domain_index']}"
+                    elem = {}
+                    bfac = {}
+                    for r in rows:
+                        if r["label_seq_id"] is not None and r["atom"] in BACKBONE:
+                            elem.setdefault(r["label_seq_id"], {})[r["atom"]] = r["element"]
+                            bfac.setdefault(r["label_seq_id"], {})[r["atom"]] = r["b"]
+                    srows = []
+                    for i, (pos, aa) in enumerate(positions):
+                        num = dm["start0"] + i + 1  # 1-based position in full submitted sequence == entity_poly_seq.num
+                        m = mapped[num]
+                        can_aa = e["can"][num - 1]
+                        st = m["mapping_status"]
+                        norm = ""
+                        nonstd = [c for c in m["seq_mon_ids"].split(",") if c not in STANDARD]
+                        for comp in nonstd:
+                            try:
+                                par, one, nm = ccd_parent(comp, raw, dl_log)
+                            except Exception as ex:
+                                par, one, nm = "", "", f"CCD lookup failed: {ex}"
+                            norm += f"{comp}({nm})->{can_aa} via _entity_poly.pdbx_seq_one_letter_code_can; CCD parent={par or '?'} one_letter={one or '?'};"
+                            if one.strip().upper() != can_aa and st.startswith("ok"):
+                                st = "modified_residue_parent_conflict"
+                            elif st == "ok":
+                                st = "ok_modified_residue"
+                        if can_aa != aa:
+                            st = "mismatch_sequence_vs_numbering"
+                        srows.append(dict(m, sample_id=sid, full_seq_idx1=num, seq_idx1=i + 1, aa=aa,
+                                          chothia_pos=pos.format(), region=pos.get_region(), entity_id=eid,
+                                          label_asym_id=asym, auth_asym_id=",".join(x for x in auth_asym if x),
+                                          model_id=model, mapping_status=st, residue_normalization=norm,
+                                          elements={n: elem.get(num, {}).get(n, n[0]) for n in BACKBONE},
+                                          b={n: bfac.get(num, {}).get(n) or 0.0 for n in BACKBONE}))
+                    L = len(srows)
+                    bad = sorted({r["mapping_status"] for r in srows if not r["mapping_status"].startswith("ok")})
+                    n_valid = sum(r["atoms"][n]["valid"] for r in srows for n in BACKBONE)
+                    sample = dict(sample_id=sid, pdb_id=p, entity_id=eid, label_asym_id=asym,
+                                  auth_asym_id=",".join(x for x in auth_asym if x), model_id=model,
+                                  n_models=len(models), domain_id=f"d{dm['domain_index']}",
+                                  domain_type=dtype, domain_type_evidence=evidence,
+                                  vhh_hallmark_chothia=";".join(f"{k}:{v}" for k, v in hallmark.items()),
+                                  entity_description=e["description"], full_chain_length=len(e["can"]),
+                                  domain_start_full_idx1=dm["start0"] + 1, domain_end_full_idx1=dm["end0"] + 1,
+                                  n_term_prefix_removed=dm["start0"], c_term_removed=len(e["can"]) - dm["end0"] - 1,
+                                  L=L, variable_sequence=ch.seq, full_chain_sequence=e["can"],
+                                  sequence_source="RCSB entry FASTA; verified vs _entity_poly.pdbx_seq_one_letter_code_can and _entity_poly_seq",
+                                  fasta_header=e["fasta_header"], sequence_issues=";".join(e["issues"]),
+                                  boundary_check=dm["boundary_check"], chothia_complete_H1_H113=complete,
+                                  n_residues_with_coords=sum(r["coordinate_record_present"] for r in srows),
+                                  n_full_backbone=sum(all(r["atoms"][n]["valid"] for n in BACKBONE) for r in srows),
+                                  n_valid_backbone_atoms=n_valid, mapping_problems=";".join(bad),
+                                  chain_issues=";".join(f"{a}:{b}" for a, b in issues[:5]),
+                                  entry_issues=";".join(entry_issue), rows=srows, **d["info"])
+                    reasons = []
+                    if e["issues"]:
+                        reasons.append("sequence_source:" + ";".join(e["issues"]))
+                    if dm["boundary_check"] != "ok":
+                        reasons.append("domain_boundary")
+                    if bad:
+                        reasons.append("mapping:" + ";".join(bad))
+                    if issues:
+                        reasons.append("chain_mapping_issues")
+                    if not complete:
+                        reasons.append("v_domain_not_complete_H1_to_H113")
+                    if entry_issue:
+                        reasons.append("entry:" + ";".join(entry_issue))
+                    if sample["n_residues_with_coords"] == 0:
+                        reasons.append("no_coordinates")
+                    sample["status"] = "formal" if not reasons else "review"
+                    sample["status_reason"] = " | ".join(reasons)
+                    samples.append(sample)
+            entry_rows.append(dict(pdb_id=p, entry_status="processed", n_heavy_domain_samples=sum(1 for s in samples if s["pdb_id"] == p),
+                                   entry_issues=";".join(entry_issue), **d["info"]))
+            for eid, e in d["ents"].items():
+                if e["type"].startswith("polypeptide"):
+                    full_fa.append((f"{p}_{eid}|asyms={','.join(e['asyms'])}|{e['fasta_header']}", e["can"]))
 
+        except Exception as ex:
+            del samples[n_before:]
+            del full_fa[nf_before:]
+            entry_rows.append(dict(pdb_id=p, entry_status="processing_failed"))
+            failed.append(dict(stage="processing", error_type=type(ex).__name__, reason=repr(ex)[:500], pdb_id=p,
+                               sample_id="", attempted_fix="entry isolated; batch continued; traceback: "
+                               + traceback.format_exc().strip().splitlines()[-2].strip()))
     # representative copy per (entry, heavy V sequence)
     for key in {(s["pdb_id"], s["variable_sequence"]) for s in samples}:
         grp = [s for s in samples if (s["pdb_id"], s["variable_sequence"]) == key]
