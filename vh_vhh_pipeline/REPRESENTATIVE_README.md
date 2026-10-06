@@ -4,7 +4,8 @@ Antibody/nanobody PDB entries released after 2024-09-09 (after AF3, Chai-1, ESM3
 heavy chain >10% different (normalized Levenshtein) from the train/val heavy chains, processed with
 `.claude/skills/vh-vhh-data-collection` and strictly cleaned (see `vh_vhh_data/qc_report.md` and
 `vh_vhh_data/excluded.tsv` in the repository). For each entry, the chain copy with the most complete
-backbone is kept.
+backbone is kept. Only entries with overall resolution <= 3.5 A are included
+(entries without a resolution value, i.e. NMR, are excluded).
 
 ## Files
 

@@ -3,7 +3,7 @@
 python vh_vhh_pipeline/make_representative.py
 -> vh_vhh_representative/ (+ vh_vhh_representative.zip)
 """
-import hashlib, json, os, shutil, zipfile
+import argparse, os, shutil, zipfile
 
 import gemmi
 import numpy as np
@@ -29,6 +29,10 @@ def rcsb_resolution(ids):
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--max-resolution", type=float, default=3.5,
+                    help="keep entries with resolution_A <= this; entries without a resolution (NMR) are dropped")
+    args = ap.parse_args()
     md = pd.read_csv(os.path.join(SRC, "metadata.tsv"), sep="\t", keep_default_na=False)
     rep = md[md.is_representative.astype(str) == "True"].copy()
     assert rep.pdb_id.is_unique
@@ -101,6 +105,17 @@ def main():
             structure_cif=f"structures_cif/{sid}.cif", structure_pdb=f"structures_pdb/{sid}.pdb",
             backbone_npz=f"backbone_npz/{sid}.npz", source_mmcif_url=s.mmcif_url, source_mmcif_sha256=s.mmcif_sha256))
     master = pd.DataFrame(rows).sort_values("pdb_id")
+    n0 = len(master)
+    r = pd.to_numeric(master.resolution_A, errors="coerce")
+    dropped = master[~(r <= args.max_resolution)]
+    master = master[r <= args.max_resolution]
+    for col, d in (("structure_cif", "structures_cif"), ("structure_pdb", "structures_pdb"), ("backbone_npz", "backbone_npz")):
+        for p in dropped[col]:
+            os.remove(os.path.join(OUT, p))
+    mp = mp[mp.sample_id.isin(master.sample_id)]
+    miss = miss[miss.sample_id.isin(master.sample_id)]
+    print(f"resolution filter <= {args.max_resolution} A: kept {len(master)} of {n0}; dropped {len(dropped)} "
+          f"({(r > args.max_resolution).sum()} worse than cutoff, {r.isna().sum()} without resolution)")
     master.to_csv(os.path.join(OUT, "master.csv"), index=False)
     mp.to_csv(os.path.join(OUT, "residue_mapping.csv.gz"), index=False)
     miss.to_csv(os.path.join(OUT, "missing_atoms.csv.gz"), index=False)
