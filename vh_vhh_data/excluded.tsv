@@ -1,0 +1,47 @@
+pdb_id	sample_id	entity_description	reason
+8VGK	8VGK_e3_F_m1_d1	Fab E104.v1.6DS light chain	manual review: entity annotated light chain but numbers as heavy; label swap
+8VGK	8VGK_e3_H_m1_d1	Fab E104.v1.6DS light chain	manual review: entity annotated light chain but numbers as heavy; label swap
+8VGK	8VGK_e3_J_m1_d1	Fab E104.v1.6DS light chain	manual review: entity annotated light chain but numbers as heavy; label swap
+8VGK	8VGK_e3_K_m1_d1	Fab E104.v1.6DS light chain	manual review: entity annotated light chain but numbers as heavy; label swap
+8XTY	8XTY_e1_A_m1_d1	Vesicular acetylcholine transporter,Green fluorescent protein,antibody	pipeline_review: no_coordinates
+8XTX	8XTX_e1_A_m1_d1	Vesicular acetylcholine transporter,Green fluorescent protein,antibody	pipeline_review: no_coordinates
+8XTW	8XTW_e1_A_m1_d1	Vesicular acetylcholine transporter,Green fluorescent protein,antibody	pipeline_review: no_coordinates
+8W2E	8W2E_e3_D_m1_d1	Fab B Light Chain	manual review: entity annotated light chain but numbers as heavy; label swap
+8W2E	8W2E_e3_F_m1_d1	Fab B Light Chain	manual review: entity annotated light chain but numbers as heavy; label swap
+8ULS	8ULS_e3_G_m1_d1	01_D03 Fab Heavy Chain	non-standard Chothia insertions H71A,H71B,H71C,H71D
+8ULS	8ULS_e3_H_m1_d1	01_D03 Fab Heavy Chain	non-standard Chothia insertions H71A,H71B,H71C,H71D
+8ULS	8ULS_e3_I_m1_d1	01_D03 Fab Heavy Chain	non-standard Chothia insertions H71A,H71B,H71C,H71D
+9FYT	9FYT_e2_C_m1_d1	Light chain scFv A01	manual review: entity annotated light chain but numbers as heavy; label swap
+9FYT	9FYT_e2_E_m1_d1	Light chain scFv A01	manual review: entity annotated light chain but numbers as heavy; label swap
+9P98	9P98_e3_C_m1_d1	Fab LF61 Heavy Chain	non-standard Chothia insertions H41A
+9P97	9P97_e3_C_m1_d1	Fab LF61 Heavy Chain	non-standard Chothia insertions H41A
+9LRH	9LRH_e2_C_m1_d1	KIR2DL2_KIR2DL2/3 agonist 61 scFV	pipeline_review: no_coordinates
+9BHH	9BHH_e5_K_m1_d1	Heavy Chain of IM-CKV063	non-standard Chothia insertions H75A,H75B,H75C,H75D,H75E,H75F,H75G,H75H,H75I,H75J
+9BHH	9BHH_e5_M_m1_d1	Heavy Chain of IM-CKV063	non-standard Chothia insertions H75A,H75B,H75C,H75D,H75E,H75F,H75G,H75H,H75I,H75J
+9BHH	9BHH_e5_O_m1_d1	Heavy Chain of IM-CKV063	non-standard Chothia insertions H75A,H75B,H75C,H75D,H75E,H75F,H75G,H75H,H75I,H75J
+9BHH	9BHH_e5_Q_m1_d1	Heavy Chain of IM-CKV063	non-standard Chothia insertions H75A,H75B,H75C,H75D,H75E,H75F,H75G,H75H,H75I,H75J
+9RIU	9RIU_e1_A_m1_d1	Variable Domain of Heavy-Chain only Antibody (VHH)	non-standard Chothia insertions H40A
+9RIU	9RIU_e1_C_m1_d1	Variable Domain of Heavy-Chain only Antibody (VHH)	non-standard Chothia insertions H40A
+9IA4	9IA4_e2_B_m1_d1	Light chain	manual review: entity annotated light chain but numbers as heavy; label swap
+9LHO	9LHO_e2_C_m1_d2	scFv of 6Y13 chimera	pipeline_review: no_coordinates
+9LHO	9LHO_e2_F_m1_d2	scFv of 6Y13 chimera	pipeline_review: no_coordinates
+9LHO	9LHO_e2_I_m1_d2	scFv of 6Y13 chimera	pipeline_review: no_coordinates
+9LAD	9LAD_e1_A_m1_d1	N1 VHH	non-standard Chothia insertions H62A
+9R6H	9R6H_e1_A_m1_d1	Genome polyprotein,Mis18-binding protein 1,Chains: A	manual review: EGFP-SANTA-nanobody fusion construct, not an antibody heavy-chain entity
+9R6H	9R6H_e1_B_m1_d1	Genome polyprotein,Mis18-binding protein 1,Chains: A	manual review: EGFP-SANTA-nanobody fusion construct, not an antibody heavy-chain entity
+10ZO	10ZO_e1_A_m1_d1	Anti-Marburgvirus Nucleoprotein Single Domain Antibody A	non-standard Chothia insertions H41A
+10ZO	10ZO_e1_C_m1_d1	Anti-Marburgvirus Nucleoprotein Single Domain Antibody A	non-standard Chothia insertions H41A
+9MAZ	9MAZ_e2_C_m1_d1	J9 Heavy chain variable region	non-standard Chothia insertions H41A
+9MAZ	9MAZ_e2_D_m1_d1	J9 Heavy chain variable region	non-standard Chothia insertions H41A
+9MB1	9MB1_e2_C_m1_d1	J9 Heavy chain variable region	non-standard Chothia insertions H41A
+9MB1	9MB1_e2_E_m1_d1	J9 Heavy chain variable region	non-standard Chothia insertions H41A
+9XY4	9XY4_e3_C_m1_d1	MEDI3622 Fab Light Chain	manual review: entity annotated light chain but numbers as heavy; label swap
+9TZZ	9TZZ_e1_A_m1_d1	NbC03	non-standard Chothia insertions H37A
+9TZZ	9TZZ_e1_B_m1_d1	NbC03	non-standard Chothia insertions H37A
+9OEF	9OEF_e2_B_m1_d1	7C8 heavy chain	non-standard Chothia insertions H104A
+9OEF	9OEF_e2_E_m1_d1	7C8 heavy chain	non-standard Chothia insertions H104A
+9T5P	9T5P_e3_G_m1_d1	Volume-regulated anion channel subunit LRRC8D	manual review: heavy V domain annotated as LRRC8D channel subunit; annotation conflict
+9DSH			processing: ValueError('AbNumber returned no/inconsistent positions for 9DSH entity 1 domain 1')
+9DSG			processing: ValueError('AbNumber returned no/inconsistent positions for 9DSG entity 2 domain 1')
+9DSJ			processing: ValueError('AbNumber returned no/inconsistent positions for 9DSJ entity 1 domain 1')
+9DSK			processing: ValueError('AbNumber returned no/inconsistent positions for 9DSK entity 1 domain 1')
