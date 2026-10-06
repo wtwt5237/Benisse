@@ -1,0 +1,25 @@
+{
+  "candidate_table": "pdb_ab_nb_after_2024-09-09_novel_vs_train_val_fulllength.csv",
+  "candidate_table_note": "1,320 PDB entries: antibody/nanobody keyword hits released after 2024-09-09 (latest of AF3, Chai-1, ESM3, IgFold, RFAA), one distinct heavy V domain (IMGT/ANARCI screen), >10% normalized Levenshtein distance from train+val heavy chains, full-length IMGT 1-128. This pipeline re-derives everything from the original mmCIF/FASTA and does not reuse the IMGT sequences from that table.",
+  "output_dir": "vh_vhh_data",
+  "numbering": {"tool": "AbNumber (ANARCI backend)", "scheme": "chothia", "cdr_definition": "chothia", "allowed_species": null},
+  "sources": {
+    "mmcif": "https://files.rcsb.org/download/{PDB_ID}.cif.gz",
+    "fasta_entry": "https://www.rcsb.org/fasta/entry/{PDB_ID}/download"
+  },
+  "model_selection": "lowest pdbx_PDB_model_num present for the chain",
+  "altloc_rule": "residue-level: shared atoms (blank altloc) plus one altloc label; choose label with most backbone atoms having occupancy>0, then highest summed backbone occupancy, then alphabetical",
+  "zero_occupancy_counts_as_observed": false,
+  "include_all_copies_of_heavy_entity": true,
+  "representative_rule": "per PDB entry and heavy-domain sequence: copy with most complete backbone atoms, ties broken by label_asym_id order",
+  "formal_set_requires": ["mapping_status ok for every residue with coordinates", "no unexplained residue mismatch", "full submitted sequence available and consistent between FASTA and mmCIF"],
+  "domain_type_rule": "VHH if the heavy entity description mentions nanobody/VHH/sybody/single-domain antibody; VH if no such annotation and a light-chain V domain (AbNumber K/L) exists in the same entry; otherwise unknown. AbNumber H type alone is not treated as VHH evidence.",
+  "not_restricted": {
+    "species": "not restricted",
+    "resolution": "not restricted",
+    "experimental_method": "not restricted (all inputs are experimental PDB entries; method recorded)",
+    "antigen_presence": "not restricted",
+    "structural_completeness_threshold": "not restricted (missing residues/atoms are annotated, not filtered)",
+    "duplicate_sequences": "kept; duplicate groups recorded"
+  }
+}

@@ -1,0 +1,4 @@
+# Original mmCIF/FASTA/CCD downloads (~465 MB). Not committed; URLs, retrieval times and
+# SHA-256 checksums are in metadata.tsv / entries.tsv / download_log.tsv, and
+# `python vh_vhh_pipeline/pipeline.py` re-downloads them into raw/.
+raw/
