@@ -219,13 +219,45 @@ def parse_domains(seqs):
     errs = {}
     for i in range(0, len(keys), 300):
         chunk = keys[i:i + 300]
+        # classify domain types first with IMGT (defined for antibody AND TCR domains); only sequences whose
+        # domains are all antibody H/K/L go to Chothia, so a TCR chain is never forced into a heavy-chain scheme
+        _, cls_ali, _ = run_anarci([(k, seqs[k]) for k in chunk], scheme="imgt",
+                                   allowed_species=CFG["numbering"]["allowed_species"], ncpu=4)
+        ab_keys = []
+        for k, al in zip(chunk, cls_ali):
+            types = [a["chain_type"] for a in (al or [])]
+            if types and all(t in "HKL" for t in types):
+                ab_keys.append(k)
+            elif types:
+                errs[k] = f"Variable chain sequence not recognized as antibody: non-antibody V domain types {types} (e.g. TCR)"
+        chunk = ab_keys
+        if not chunk:
+            continue
         numbered, ali, _ = run_anarci([(k, seqs[k]) for k in chunk], scheme="chothia",
                                       allowed_species=CFG["numbering"]["allowed_species"], ncpu=4)
-        chains, cerr = Chain.batch({k: seqs[k] for k in chunk}, scheme="chothia", cdr_definition="chothia",
-                                   allowed_species=CFG["numbering"]["allowed_species"], multiple_domains=True)
+        abn_in = {k: seqs[k] for k, n in zip(chunk, numbered) if n}
+        try:
+            chains, cerr = Chain.batch(abn_in, scheme="chothia", cdr_definition="chothia",
+                                       allowed_species=CFG["numbering"]["allowed_species"], multiple_domains=True)
+        except Exception:
+            # isolate the failing sequence(s) so one bad input cannot abort the batch
+            chains, cerr = {}, {}
+            for k, sq in abn_in.items():
+                try:
+                    c1, e1 = Chain.batch({k: sq}, scheme="chothia", cdr_definition="chothia",
+                                         allowed_species=CFG["numbering"]["allowed_species"], multiple_domains=True)
+                    chains.update(c1)
+                    cerr.update(e1)
+                except Exception as ex:
+                    cerr[k] = f"AbNumber failed: {type(ex).__name__}: {ex}"
+        for k, n in zip(chunk, numbered):
+            if not n:
+                cerr.setdefault(k, "Variable chain sequence not recognized (no H/K/L domain)")
         errs.update(cerr)
         for k, num, al in zip(chunk, numbered, ali):
             if not num:
+                continue
+            if k in errs and k not in chains:
                 continue
             abn = chains.get(k, [])
             if len(abn) != len(num):
