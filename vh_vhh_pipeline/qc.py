@@ -33,7 +33,7 @@ def run(out, samples, formal, entry_rows, failed, ids, aln_rows, col_names, stat
         if s["status"] == "formal" and any(not str(m).startswith("ok") for m in sub.mapping_status):
             fails[4].append(sid)
         # 5 export keeps coordinates and seq_idx1 numbering
-        if s["export_check"] != "ok":
+        if s["export_check"] not in ("ok", "not_written_no_valid_backbone_atoms"):
             fails[5].append(sid)
         # 6 masks
         c, m = z["coords"], z["atom_mask"]

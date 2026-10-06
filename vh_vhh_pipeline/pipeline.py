@@ -275,6 +275,8 @@ def parse_domains(seqs):
 
 # ---------------------------------------------------------------- export
 def write_backbone_cif(path, sample, chain_name):
+    if not any(r["atoms"][n]["valid"] for r in sample["rows"] for n in BACKBONE):
+        return "not_written_no_valid_backbone_atoms"
     st = gemmi.Structure()
     st.name = sample["sample_id"]
     try:
@@ -603,7 +605,10 @@ def main():
             auth_seq_id=np.array([r["auth_seq_id"] for r in s["rows"]]),
             auth_insertion_code=np.array([r["insertion_code"] for r in s["rows"]]),
             occupancy=occ, atom_names=np.array(BACKBONE))
-        s["export_check"] = write_backbone_cif(os.path.join(sd, "backbone_1based.cif"), s, "H")
+        try:
+            s["export_check"] = write_backbone_cif(os.path.join(sd, "backbone_1based.cif"), s, "H")
+        except Exception as ex:
+            s["export_check"] = f"export_failed: {type(ex).__name__}: {ex}"
         if s["export_check"] != "ok":
             s["status"], s["status_reason"] = "review", (s["status_reason"] + " | export:" + s["export_check"]).strip(" |")
         var_fa.append((f"{s['sample_id']}|{s['domain_type']}|full_idx1={s['domain_start_full_idx1']}-{s['domain_end_full_idx1']}",
